@@ -3,6 +3,8 @@ import streamlit as st
 import requests
 import json
 from typing import Dict, Any
+import PyPDF2
+import io
 
 class XAIClient:
     def __init__(self, api_key: str):
@@ -20,9 +22,6 @@ class XAIClient:
         temperature: float = 0,
         stream: bool = False
     ) -> Dict[str, Any]:
-        """
-        Realiza una llamada a la API de chat completions
-        """
         endpoint = f"{self.base_url}/chat/completions"
         
         payload = {
@@ -42,6 +41,36 @@ class XAIClient:
             return response.json()
         except requests.exceptions.RequestException as e:
             raise Exception(f"Error en la llamada a la API: {str(e)}")
+
+def extract_text_from_pdf(pdf_file):
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    return text
+
+def get_system_message(option: str, pdf_text: str = "") -> str:
+    system_messages = {
+        "Revisar ortografía y gramática": f"""Analiza el siguiente texto y revisa su ortografía y gramática. 
+        Proporciona correcciones detalladas y sugerencias de mejora.
+        
+        Texto del PDF:
+        {pdf_text}""",
+        
+        "Hacer un resumen": f"""Genera un resumen conciso y coherente del siguiente texto, 
+        destacando los puntos principales y las ideas clave.
+        
+        Texto del PDF:
+        {pdf_text}""",
+        
+        "Chatear con el PDF": f"""Actúa como un asistente experto que ha leído y comprende 
+        completamente el siguiente documento. Responde preguntas sobre su contenido 
+        de manera precisa y detallada.
+        
+        Contenido del documento:
+        {pdf_text}"""
+    }
+    return system_messages.get(option, "You are a helpful assistant.")
 
 def main():
     st.set_page_config(
@@ -67,9 +96,25 @@ def main():
     # Inicializar el cliente
     xai_client = XAIClient(st.secrets['xai_api_key'])
     
-    # Configuración del chat
+    # Configuración del chat y carga de PDF
     with st.sidebar:
         st.subheader("⚙️ Configuración")
+        
+        # Subida de PDF
+        uploaded_file = st.file_uploader("Cargar PDF", type=['pdf'])
+        
+        # Menú de opciones del sistema
+        system_options = [
+            "Revisar ortografía y gramática",
+            "Hacer un resumen",
+            "Chatear con el PDF"
+        ]
+        selected_option = st.selectbox(
+            "Selecciona una opción",
+            ["Chat general"] + system_options,
+            index=0
+        )
+        
         model = st.selectbox(
             "Modelo",
             ["grok-beta"],
@@ -82,11 +127,13 @@ def main():
             value=0.0,
             step=0.1
         )
-        system_message = st.text_area(
-            "Mensaje del sistema",
-            value="You are a test assistant.",
-            height=100
-        )
+    
+    # Procesar PDF si se ha subido
+    if uploaded_file is not None:
+        pdf_text = extract_text_from_pdf(uploaded_file)
+        if 'pdf_text' not in st.session_state:
+            st.session_state.pdf_text = pdf_text
+            st.success("PDF cargado exitosamente!")
     
     # Inicializar el historial de chat en la sesión
     if 'messages' not in st.session_state:
@@ -99,6 +146,11 @@ def main():
     
     # Input del usuario
     if prompt := st.chat_input("Escribe tu mensaje..."):
+        # Verificar si se necesita PDF para la opción seleccionada
+        if selected_option in system_options and 'pdf_text' not in st.session_state:
+            st.error("Por favor, carga un PDF primero para usar esta opción.")
+            return
+        
         # Agregar mensaje del usuario al historial
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -106,6 +158,11 @@ def main():
             st.write(prompt)
         
         # Preparar mensajes para la API
+        system_message = get_system_message(
+            selected_option,
+            st.session_state.get('pdf_text', '')
+        )
+        
         api_messages = [
             {"role": "system", "content": system_message}
         ] + st.session_state.messages
@@ -135,6 +192,8 @@ def main():
     # Botón para limpiar el chat
     if st.sidebar.button("🧹 Limpiar Chat"):
         st.session_state.messages = []
+        if 'pdf_text' in st.session_state:
+            del st.session_state.pdf_text
         st.rerun()
 
 if __name__ == "__main__":
