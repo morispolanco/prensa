@@ -39,8 +39,16 @@ def obtener_contenido(seccion):
 
     st.write(f"Accediendo a la URL: {url}")  # Mensaje de depuración
 
+    # Añadir encabezados para simular un navegador real
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/90.0.4430.93 Safari/537.36",
+        "Accept-Language": "es-ES,es;q=0.9"
+    }
+
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
         if response.status_code != 200:
             st.error(f"No se pudo obtener el contenido de la sección {seccion}. (Estado: {response.status_code})")
             return None
@@ -48,7 +56,9 @@ def obtener_contenido(seccion):
 
         # **Importante**: Actualiza estos selectores según la estructura actual de PrensaLibre.com
         # Después de inspeccionar la página, ajusta los selectores a continuación
-        articulos = soup.find_all('h2', class_='article-title')  # Ejemplo de selector
+
+        # Ejemplo de selector: <h2 class="headline">
+        articulos = soup.find_all('h2', class_='headline')  # Actualiza según la inspección
 
         if not articulos:
             st.warning("No se encontraron artículos con el selector especificado. Verifica los selectores en el código.")
@@ -58,11 +68,15 @@ def obtener_contenido(seccion):
         enlaces_encontrados = []  # Para depuración
 
         for articulo in articulos[:5]:  # Limitar a los primeros 5 artículos para ejemplo
-            enlace = articulo.find('a')['href']
+            enlace_tag = articulo.find('a')
+            if not enlace_tag or not enlace_tag.get('href'):
+                st.warning("Un artículo no contiene un enlace válido.")
+                continue
+            enlace = enlace_tag['href']
             enlace_completo = urljoin(url, enlace)
             enlaces_encontrados.append(enlace_completo)
 
-            resp_art = requests.get(enlace_completo)
+            resp_art = requests.get(enlace_completo, headers=headers)
             if resp_art.status_code == 200:
                 soup_art = BeautifulSoup(resp_art.text, 'html.parser')
                 parrafos = soup_art.find_all('p')
@@ -75,6 +89,10 @@ def obtener_contenido(seccion):
             st.write("**Enlaces encontrados:**")
             for enlace in enlaces_encontrados:
                 st.write(enlace)
+
+        if st.checkbox("Mostrar HTML bruto de la sección"):
+            st.write("**HTML de la sección:**")
+            st.write(soup.prettify())
 
         if not texto_completo:
             st.warning("No se encontró contenido para analizar.")
