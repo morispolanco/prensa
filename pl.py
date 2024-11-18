@@ -19,7 +19,7 @@ class XAIClient:
         self,
         messages: list,
         model: str = "grok-beta",
-        temperature: float = 0.7,  # Aumentado para más creatividad
+        temperature: float = 0.5,
         stream: bool = False
     ) -> Dict[str, Any]:
         endpoint = f"{self.base_url}/chat/completions"
@@ -42,14 +42,21 @@ class XAIClient:
         except requests.exceptions.RequestException as e:
             raise Exception(f"Error en la llamada a la API: {str(e)}")
 
+def extract_text_from_pdf(pdf_file):
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    return text
+
 def main():
     st.set_page_config(
-        page_title="Escritor de Novelas Juveniles",
-        page_icon="📚",
+        page_title="Adaptador de Filosofía para Jóvenes",
+        page_icon="🎯",
         layout="wide"
     )
     
-    st.title("📚 Escritor de Novelas Juveniles")
+    st.title("🎯 Adaptador de Filosofía para Jóvenes")
     
     # Verificar que la API key está configurada
     if 'xai_api_key' not in st.secrets:
@@ -66,49 +73,55 @@ def main():
     # Inicializar el cliente
     xai_client = XAIClient(st.secrets['xai_api_key'])
     
-    # Configuración del chat
+    # Configuración del sidebar
     with st.sidebar:
-        st.subheader("📖 Tu Novela")
-        if 'chapter_count' not in st.session_state:
-            st.session_state.chapter_count = 0
+        st.subheader("📚 Opciones de Adaptación")
+        
+        # Subida de PDF
+        uploaded_file = st.file_uploader("Cargar obra filosófica (PDF)", type=['pdf'])
+        
+        if 'text_loaded' in st.session_state and st.session_state.text_loaded:
+            st.success("✅ Texto cargado")
             
-        st.write(f"Capítulos escritos: {st.session_state.chapter_count}")
+            if 'chapter_count' in st.session_state:
+                st.write(f"Capítulos identificados: {st.session_state.chapter_count}")
         
-        # Configuración del modelo
-        model = st.selectbox(
-            "Modelo",
-            ["grok-beta"],
-            index=0
-        )
-        
-        if st.button("🔄 Empezar Nueva Novela"):
-            st.session_state.messages = []
-            st.session_state.chapter_count = 0
+        # Botón para reiniciar
+        if st.button("🔄 Comenzar Nueva Adaptación"):
+            for key in ['messages', 'text_loaded', 'chapter_count', 'text_content']:
+                if key in st.session_state:
+                    del st.session_state[key]
             st.rerun()
     
-    # Mensaje del sistema para el asistente escritor
-    SYSTEM_MESSAGE = """Eres un escritor experto de novelas juveniles. Me ayudarás a escribir una novela juvenil de aventuras.
-    Para ello, escribirás un capítulo a la vez y luego propondrás 3 opciones diferentes y emocionantes para el siguiente capítulo.
-    
-    Sigue estas reglas:
-    1. Si es el primer mensaje, preséntate y pide detalles sobre el protagonista y el tipo de aventura que queremos crear.
-    2. Cuando escribas un capítulo, hazlo de forma emocionante y detallada, con diálogos y descripciones vívidas.
-    3. Después de cada capítulo, propón 3 opciones diferentes para continuar la historia.
-    4. Si el usuario escribe "capítulo final", escribe un final épico y satisfactorio para la historia.
-    5. Mantén un tono apropiado para el público juvenil.
-    6. Los capítulos deben tener una longitud moderada (aproximadamente 500-800 palabras).
-    
-    Cuando presentes las opciones, hazlo así:
-    OPCIONES PARA EL SIGUIENTE CAPÍTULO:
-    A) [Primera opción emocionante]
-    B) [Segunda opción intrigante]
-    C) [Tercera opción sorprendente]
-    
-    Elige una opción escribiendo A, B o C, o escribe "capítulo final" si quieres terminar la historia."""
+    # Mensaje del sistema para el asistente
+    SYSTEM_MESSAGE = """Eres un filósofo profesional especializado en adaptar grandes obras de la filosofía a un público juvenil.
+    Tu objetivo es hacer que conceptos filosóficos complejos sean accesibles y emocionantes para jóvenes lectores.
+
+    Sigue este proceso:
+    1. Primero pide al usuario que suba el archivo PDF con la obra filosófica.
+    2. Una vez recibido el texto, analízalo y divídelo en capítulos temáticos.
+    3. Presenta al usuario un resumen de los capítulos identificados.
+    4. Pide al usuario que especifique qué capítulos quiere que sean adaptados.
+    5. Por cada capítulo solicitado, crea una versión adaptada que:
+       - Use lenguaje claro y accesible
+       - Incluya ejemplos modernos y relevantes
+       - Incorpore elementos narrativos atractivos
+       - Mantenga la esencia filosófica del texto original
+       - Incluya preguntas de reflexión al final
+
+    Si es tu primer mensaje, pide amablemente al usuario que suba el archivo PDF de la obra filosófica que desea adaptar."""
     
     # Inicializar el historial de chat en la sesión
     if 'messages' not in st.session_state:
         st.session_state.messages = []
+    
+    # Procesar PDF si se ha subido
+    if uploaded_file is not None and 'text_loaded' not in st.session_state:
+        with st.spinner("Procesando el texto..."):
+            text_content = extract_text_from_pdf(uploaded_file)
+            st.session_state.text_content = text_content
+            st.session_state.text_loaded = True
+            st.rerun()
     
     # Mostrar mensajes del chat
     for message in st.session_state.messages:
@@ -116,7 +129,7 @@ def main():
             st.write(message["content"])
     
     # Input del usuario
-    if prompt := st.chat_input("Escribe tu mensaje o elección..."):
+    if prompt := st.chat_input("Escribe tu mensaje..."):
         # Agregar mensaje del usuario al historial
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -128,14 +141,21 @@ def main():
             {"role": "system", "content": SYSTEM_MESSAGE}
         ] + st.session_state.messages
         
+        # Si hay texto cargado, incluirlo en el contexto
+        if 'text_content' in st.session_state:
+            api_messages.append({
+                "role": "system",
+                "content": f"Este es el texto de la obra filosófica:\n\n{st.session_state.text_content}"
+            })
+        
         # Realizar llamada a la API
         with st.chat_message("assistant"):
-            with st.spinner("Escribiendo..."):
+            with st.spinner("Analizando..."):
                 try:
                     response = xai_client.chat_completion(
                         messages=api_messages,
                         model=model,
-                        temperature=0.7
+                        temperature=0.5
                     )
                     
                     assistant_message = response["choices"][0]["message"]["content"]
@@ -146,10 +166,6 @@ def main():
                         "role": "assistant",
                         "content": assistant_message
                     })
-                    
-                    # Incrementar contador de capítulos si se detecta un nuevo capítulo
-                    if any(keyword in prompt.lower() for keyword in ['a)', 'b)', 'c)', 'capítulo']):
-                        st.session_state.chapter_count += 1
                     
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
