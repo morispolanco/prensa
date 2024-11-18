@@ -1,6 +1,6 @@
 streamlit 
 requests 
 beautifulsoup4
-language-tool-python
+pypdf
 plotly
 pandas
