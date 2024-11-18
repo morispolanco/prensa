@@ -51,12 +51,12 @@ def extract_text_from_pdf(pdf_file):
 
 def main():
     st.set_page_config(
-        page_title="Adaptador de Filosofía para Jóvenes",
-        page_icon="🎯",
+        page_title="Chat con PDF",
+        page_icon="📄",
         layout="wide"
     )
     
-    st.title("🎯 Adaptador de Filosofía para Jóvenes")
+    st.title("📄 Chat con PDF")
     
     # Verificar que la API key está configurada
     if 'xai_api_key' not in st.secrets:
@@ -75,7 +75,7 @@ def main():
     
     # Configuración del sidebar
     with st.sidebar:
-        st.subheader("📚 Opciones de Adaptación")
+        st.subheader("📚 Opciones")
         
         # Selección del modelo
         model = st.selectbox(
@@ -85,38 +85,32 @@ def main():
         )
         
         # Subida de PDF
-        uploaded_file = st.file_uploader("Cargar obra filosófica (PDF)", type=['pdf'])
+        uploaded_file = st.file_uploader("Cargar PDF", type=['pdf'])
         
         if 'text_loaded' in st.session_state and st.session_state.text_loaded:
-            st.success("✅ Texto cargado")
-            
-            if 'chapter_count' in st.session_state:
-                st.write(f"Capítulos identificados: {st.session_state.chapter_count}")
+            st.success("✅ PDF Cargado")
         
         # Botón para reiniciar
-        if st.button("🔄 Comenzar Nueva Adaptación"):
-            for key in ['messages', 'text_loaded', 'chapter_count', 'text_content']:
+        if st.button("🔄 Reiniciar"):
+            for key in ['messages', 'text_loaded', 'text_content']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
     
     # Mensaje del sistema para el asistente
-    SYSTEM_MESSAGE = """Eres un filósofo profesional especializado en adaptar grandes obras de la filosofía a un público juvenil.
-    Tu objetivo es hacer que conceptos filosóficos complejos sean accesibles y emocionantes para jóvenes lectores.
+    SYSTEM_MESSAGE = """Eres un asistente experto en análisis de documentos PDF. 
+    Tu objetivo es ayudar al usuario a comprender, analizar y extraer información del documento.
 
-    Sigue este proceso:
-    1. Primero pide al usuario que suba el archivo PDF con la obra filosófica.
-    2. Una vez recibido el texto, analízalo y divídelo en capítulos temáticos.
-    3. Presenta al usuario un resumen de los capítulos identificados.
-    4. Pide al usuario que especifique qué capítulos quiere que sean adaptados.
-    5. Por cada capítulo solicitado, crea una versión adaptada que:
-       - Use lenguaje claro y accesible
-       - Incluya ejemplos modernos y relevantes
-       - Incorpore elementos narrativos atractivos
-       - Mantenga la esencia filosófica del texto original
-       - Incluya preguntas de reflexión al final
+    Reglas:
+    1. Primero, pide al usuario que suba un archivo PDF.
+    2. Una vez cargado el PDF, puedes:
+       - Responder preguntas específicas sobre el contenido
+       - Hacer resúmenes
+       - Extraer información clave
+       - Analizar la estructura del documento
+       - Ayudar a encontrar información concreta
 
-    Si es tu primer mensaje, pide amablemente al usuario que suba el archivo PDF de la obra filosófica que desea adaptar."""
+    Mantén tus respuestas claras, precisas y directamente relacionadas con el contenido del PDF."""
     
     # Inicializar el historial de chat en la sesión
     if 'messages' not in st.session_state:
@@ -124,7 +118,7 @@ def main():
     
     # Procesar PDF si se ha subido
     if uploaded_file is not None and 'text_loaded' not in st.session_state:
-        with st.spinner("Procesando el texto..."):
+        with st.spinner("Procesando el PDF..."):
             text_content = extract_text_from_pdf(uploaded_file)
             st.session_state.text_content = text_content
             st.session_state.text_loaded = True
@@ -136,7 +130,7 @@ def main():
             st.write(message["content"])
     
     # Input del usuario
-    if prompt := st.chat_input("Escribe tu mensaje..."):
+    if prompt := st.chat_input("Escribe tu pregunta sobre el PDF..."):
         # Agregar mensaje del usuario al historial
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -152,7 +146,7 @@ def main():
         if 'text_content' in st.session_state:
             api_messages.append({
                 "role": "system",
-                "content": f"Este es el texto de la obra filosófica:\n\n{st.session_state.text_content}"
+                "content": f"Contenido del PDF:\n\n{st.session_state.text_content}"
             })
         
         # Realizar llamada a la API
