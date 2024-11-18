@@ -1,169 +1,141 @@
 # app.py
 import streamlit as st
 import requests
-from bs4 import BeautifulSoup
-from language_tool_python import LanguageTool
-import pandas as pd
-import plotly.express as px
-import time
+import json
+from typing import Dict, Any
 
-class WebContentChecker:
-    def __init__(self, language='es'):
-        self.language_tool = LanguageTool(language)
+class XAIClient:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.x.ai/v1"
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
     
-    def get_web_content(self, url):
+    def chat_completion(
+        self,
+        messages: list,
+        model: str = "grok-beta",
+        temperature: float = 0,
+        stream: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Realiza una llamada a la API de chat completions
+        """
+        endpoint = f"{self.base_url}/chat/completions"
+        
+        payload = {
+            "messages": messages,
+            "model": model,
+            "stream": stream,
+            "temperature": temperature
+        }
+        
         try:
-            response = requests.get(url)
+            response = requests.post(
+                endpoint,
+                headers=self.headers,
+                json=payload
+            )
             response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            for script in soup(["script", "style"]):
-                script.decompose()
-                
-            text = soup.get_text()
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = ' '.join(chunk for chunk in chunks if chunk)
-            
-            return text
-        except Exception as e:
-            raise Exception(f"Error al obtener contenido web: {str(e)}")
-    
-    def check_text(self, text):
-        matches = self.language_tool.check(text)
-        return matches
-    
-    def format_errors(self, matches):
-        formatted_errors = []
-        for match in matches:
-            error = {
-                'mensaje': match.message,
-                'contexto': match.context,
-                'sugerencias': match.replacements if match.replacements else ['Sin sugerencias'],
-                'categoria': match.category,
-                'offset': match.offset,
-                'longitud': match.errorLength
-            }
-            formatted_errors.append(error)
-        return formatted_errors
-    
-    def analyze_url(self, url):
-        try:
-            content = self.get_web_content(url)
-            matches = self.check_text(content)
-            errors = self.format_errors(matches)
-            
-            return {
-                'url': url,
-                'total_errores': len(errors),
-                'errores': errors,
-                'contenido': content
-            }
-        finally:
-            self.language_tool.close()
-
-def create_error_statistics(errors):
-    if not errors:
-        return pd.DataFrame()
-    
-    # Crear DataFrame con errores
-    df = pd.DataFrame([{'categoria': error['categoria']} for error in errors])
-    
-    # Contar errores por categoría
-    error_counts = df['categoria'].value_counts().reset_index()
-    error_counts.columns = ['Categoría', 'Cantidad']
-    
-    return error_counts
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Error en la llamada a la API: {str(e)}")
 
 def main():
     st.set_page_config(
-        page_title="Spell Checker Web",
-        page_icon="📝",
+        page_title="X.AI Chat Interface",
+        page_icon="🤖",
         layout="wide"
     )
     
-    st.title("📝 Analizador de Ortografía y Gramática")
-    st.write("Analiza la ortografía y gramática de cualquier página web")
+    st.title("🤖 X.AI Chat Interface")
     
-    # Sidebar para configuración
-    st.sidebar.title("⚙️ Configuración")
-    language = st.sidebar.selectbox(
-        "Selecciona el idioma",
-        options=['es', 'en'],
-        format_func=lambda x: 'Español' if x == 'es' else 'English'
-    )
+    # Verificar que la API key está configurada
+    if 'xai_api_key' not in st.secrets:
+        st.error("""
+        ⚠️ No se encontró la API key en los secrets.
+        
+        Por favor, configura el archivo .streamlit/secrets.toml con:
+        ```toml
+        xai_api_key = "tu-api-key"
+        ```
+        """)
+        return
     
-    # Input URL
-    url = st.text_input("🌐 Ingresa la URL de la página web", "")
+    # Inicializar el cliente
+    xai_client = XAIClient(st.secrets['xai_api_key'])
     
-    if st.button("🔍 Analizar"):
-        if url:
-            try:
-                with st.spinner('Analizando la página web...'):
-                    checker = WebContentChecker(language=language)
-                    results = checker.analyze_url(url)
-                
-                # Mostrar resultados en pestañas
-                tab1, tab2, tab3 = st.tabs(["📊 Resumen", "📝 Errores Detallados", "📄 Contenido"])
-                
-                with tab1:
-                    # Métricas principales
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.metric("Total de Errores", results['total_errores'])
-                    
-                    with col2:
-                        palabras = len(results['contenido'].split())
-                        st.metric("Total de Palabras", palabras)
-                    
-                    # Gráfico de errores por categoría
-                    st.subheader("Distribución de Errores por Categoría")
-                    error_stats = create_error_statistics(results['errores'])
-                    if not error_stats.empty:
-                        fig = px.bar(
-                            error_stats,
-                            x='Categoría',
-                            y='Cantidad',
-                            color='Cantidad',
-                            color_continuous_scale='Viridis'
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No se encontraron errores para mostrar en el gráfico")
-                
-                with tab2:
-                    if results['errores']:
-                        for i, error in enumerate(results['errores'], 1):
-                            with st.expander(f"Error #{i}: {error['categoria']}", expanded=i==1):
-                                st.write("**Mensaje:**", error['mensaje'])
-                                st.write("**Contexto:**", error['contexto'])
-                                st.write("**Sugerencias:**", ", ".join(error['sugerencias']))
-                    else:
-                        st.success("¡No se encontraron errores!")
-                
-                with tab3:
-                    st.subheader("Contenido Analizado")
-                    st.text_area("Texto extraído de la página web:", 
-                               value=results['contenido'], 
-                               height=300,
-                               disabled=True)
-                    
-            except Exception as e:
-                st.error(f"Error al analizar la URL: {str(e)}")
-        else:
-            st.warning("Por favor, ingresa una URL para analizar")
+    # Configuración del chat
+    with st.sidebar:
+        st.subheader("⚙️ Configuración")
+        model = st.selectbox(
+            "Modelo",
+            ["grok-beta"],
+            index=0
+        )
+        temperature = st.slider(
+            "Temperatura",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.0,
+            step=0.1
+        )
+        system_message = st.text_area(
+            "Mensaje del sistema",
+            value="You are a test assistant.",
+            height=100
+        )
     
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        """
-        <div style='text-align: center'>
-            <p>Desarrollado con ❤️ usando Streamlit</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # Inicializar el historial de chat en la sesión
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    
+    # Mostrar mensajes del chat
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    
+    # Input del usuario
+    if prompt := st.chat_input("Escribe tu mensaje..."):
+        # Agregar mensaje del usuario al historial
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.chat_message("user"):
+            st.write(prompt)
+        
+        # Preparar mensajes para la API
+        api_messages = [
+            {"role": "system", "content": system_message}
+        ] + st.session_state.messages
+        
+        # Realizar llamada a la API
+        with st.chat_message("assistant"):
+            with st.spinner("Pensando..."):
+                try:
+                    response = xai_client.chat_completion(
+                        messages=api_messages,
+                        model=model,
+                        temperature=temperature
+                    )
+                    
+                    assistant_message = response["choices"][0]["message"]["content"]
+                    st.write(assistant_message)
+                    
+                    # Agregar respuesta al historial
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": assistant_message
+                    })
+                    
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+    
+    # Botón para limpiar el chat
+    if st.sidebar.button("🧹 Limpiar Chat"):
+        st.session_state.messages = []
+        st.rerun()
 
 if __name__ == "__main__":
     main()
