@@ -18,7 +18,7 @@ API_URL = "https://api.x.ai/v1/chat/completions"
 
 # Mapeo de secciones a sus URLs correspondientes
 secciones_urls = {
-    "Nacional": "https://www.prensalibre.com/nacional/",
+    "Nacional": "https://prensalibre.com/guatemala/",
     "Internacional": "https://www.prensalibre.com/internacional/",
     "Economía": "https://www.prensalibre.com/economia/",
     "Deportes": "https://www.prensalibre.com/deportes/",
