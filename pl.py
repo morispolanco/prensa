@@ -16,49 +16,52 @@ st.title("📝 Revisor de Ortografía y Gramática para PrensaLibre.com")
 API_KEY = st.secrets["api"]["key"]
 API_URL = "https://api.x.ai/v1/chat/completions"
 
-# Definir las secciones del periódico
-secciones = [
-    "Nacional",
-    "Internacional",
-    "Economía",
-    "Deportes",
-    "Cultura",
-    "Opinión",
-    "Tecnología",
-    "Salud",
-    "Educación",
-    "Otros"
-]
+# Mapeo de secciones a sus URLs correspondientes
+secciones_urls = {
+    "Nacional": "https://www.prensalibre.com/nacional/",
+    "Internacional": "https://www.prensalibre.com/internacional/",
+    "Economía": "https://www.prensalibre.com/economia/",
+    "Deportes": "https://www.prensalibre.com/deportes/",
+    "Cultura": "https://www.prensalibre.com/cultura/",
+    "Opinión": "https://www.prensalibre.com/opinion/",
+    "Tecnología": "https://www.prensalibre.com/tecnologia/",
+    "Salud": "https://www.prensalibre.com/salud/",
+    "Educación": "https://www.prensalibre.com/educacion/",
+    "Otros": "https://www.prensalibre.com/"
+}
 
 # Función para obtener el contenido de la sección
 def obtener_contenido(seccion):
-    # Construir la URL correctamente
-    base_url = "https://www.prensalibre.com/"
-    if seccion.lower() == "otros":
-        url = base_url
-    else:
-        url = urljoin(base_url, seccion.lower() + "/")
-    
+    url = secciones_urls.get(seccion)
+    if not url:
+        st.error(f"La sección '{seccion}' no tiene una URL mapeada.")
+        return None
+
+    st.write(f"Accediendo a la URL: {url}")  # Mensaje de depuración
+
     try:
         response = requests.get(url)
         if response.status_code != 200:
             st.error(f"No se pudo obtener el contenido de la sección {seccion}. (Estado: {response.status_code})")
             return None
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Actualiza este selector según la estructura actual
-        # Por ejemplo, si los titulares están en <h2 class="article-title">
-        articulos = soup.find_all('h2', class_='article-title')  # Actualiza según la inspección
-        
+
+        # **Importante**: Actualiza estos selectores según la estructura actual de PrensaLibre.com
+        # Después de inspeccionar la página, ajusta los selectores a continuación
+        articulos = soup.find_all('h2', class_='article-title')  # Ejemplo de selector
+
         if not articulos:
             st.warning("No se encontraron artículos con el selector especificado. Verifica los selectores en el código.")
             return None
-        
+
         texto_completo = ""
+        enlaces_encontrados = []  # Para depuración
+
         for articulo in articulos[:5]:  # Limitar a los primeros 5 artículos para ejemplo
             enlace = articulo.find('a')['href']
-            # Asegurarse de que el enlace sea absoluto
-            enlace_completo = urljoin(base_url, enlace)
+            enlace_completo = urljoin(url, enlace)
+            enlaces_encontrados.append(enlace_completo)
+
             resp_art = requests.get(enlace_completo)
             if resp_art.status_code == 200:
                 soup_art = BeautifulSoup(resp_art.text, 'html.parser')
@@ -67,7 +70,12 @@ def obtener_contenido(seccion):
                     texto_completo += p.get_text() + "\n"
             else:
                 st.warning(f"No se pudo acceder al artículo: {enlace_completo} (Estado: {resp_art.status_code})")
-        
+
+        if st.checkbox("Mostrar enlaces extraídos"):
+            st.write("**Enlaces encontrados:**")
+            for enlace in enlaces_encontrados:
+                st.write(enlace)
+
         if not texto_completo:
             st.warning("No se encontró contenido para analizar.")
         return texto_completo
@@ -109,7 +117,7 @@ def analizar_texto(texto):
 
 # Interfaz de usuario
 st.sidebar.header("Seleccione una sección")
-seccion_seleccionada = st.sidebar.selectbox("Secciones", secciones)
+seccion_seleccionada = st.sidebar.selectbox("Secciones", list(secciones_urls.keys()))
 
 if st.sidebar.button("Analizar"):
     with st.spinner("Obteniendo contenido..."):
