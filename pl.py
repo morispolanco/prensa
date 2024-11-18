@@ -77,6 +77,13 @@ def main():
     with st.sidebar:
         st.subheader("📚 Opciones de Adaptación")
         
+        # Selección del modelo
+        model = st.selectbox(
+            "Modelo",
+            ["grok-beta"],
+            index=0
+        )
+        
         # Subida de PDF
         uploaded_file = st.file_uploader("Cargar obra filosófica (PDF)", type=['pdf'])
         
