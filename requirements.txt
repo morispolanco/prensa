@@ -1,6 +1,6 @@
 streamlit 
 requests 
 beautifulsoup4
-pypdf
+pypdf2
 plotly
 pandas
